@@ -2,7 +2,8 @@
 using System.Diagnostics;
 using System.Windows.Forms;
 using LibTessDotNet;
-using System.Drawing;
+using Microsoft.Xna.Framework;
+using Color = System.Drawing.Color;
 
 namespace TessBed
 {
@@ -145,7 +146,7 @@ namespace TessBed
             RefreshAsset(_assets[index]);
         }
 
-        private object VertexCombine(Vec3 position, object[] data, float[] weights)
+        private object VertexCombine(Vector3 position, object[] data, float[] weights)
         {
             var colors = new Color[] { (Color)data[0], (Color)data[1], (Color)data[2], (Color)data[3] };
             var rgba = new float[] {
@@ -165,11 +166,12 @@ namespace TessBed
 
             foreach (var poly in asset.Polygons)
             {
-                var v = new ContourVertex[poly.Count];
+                var v = new CCRawList<Vector3>(poly.Count);
                 for (int i = 0; i < poly.Count; i++)
                 {
-                    v[i].Position = new Vec3 { X = poly[i].X, Y = poly[i].Y };
-                    v[i].Data = poly[i].Color;
+                    v.Add(new Vector3(poly[i].X, poly[i].Y, 0));
+                    //v[i].Position = new Vec3 { X = poly[i].X, Y = poly[i].Y };
+                    //v[i].Data = poly[i].Color;
                 }
                 _sw.Start();
                 _tess.AddContour(v, poly.Orientation);
@@ -181,7 +183,7 @@ namespace TessBed
             _sw.Stop();
 
             var output = new PolygonSet();
-            for (int i = 0; i < _tess.ElementCount; i++)
+            for (int i = 0; i < _tess.Elements.Count / 3; i++)
             {
                 var poly = new Polygon();
                 for (int j = 0; j < _polySize; j++)
@@ -190,16 +192,16 @@ namespace TessBed
                     if (index == -1)
                         continue;
                     var v = new PolygonPoint {
-                        X = _tess.Vertices[index].Position.X,
-                        Y = _tess.Vertices[index].Position.Y,
-                        Color = (Color)_tess.Vertices[index].Data
+                        X = _tess.Vertices[index].X,
+                        Y = _tess.Vertices[index].Y,
+                        //Color = _tess.Vertices[index].Data != null ? (Color)_tess.Vertices[index].Data : Color.White
                     };
                     poly.Add(v);
                 }
                 output.Add(poly);
             }
 
-            statusMain.Text = string.Format("{0:F3} ms - {1} polygons (of {2} vertices) {3}", _sw.Elapsed.TotalMilliseconds, _tess.ElementCount, _polySize, _polySize == 3 ? "... triangles" : "");
+            statusMain.Text = string.Format("{0:F3} ms - {1} polygons (of {2} vertices) {3}", _sw.Elapsed.TotalMilliseconds, _tess.Elements.Count / 3, _polySize, _polySize == 3 ? "... triangles" : "");
 
             _canvas.Input = asset.Polygons;
             _canvas.Output = output;

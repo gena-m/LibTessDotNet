@@ -1,13 +1,11 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.ComponentModel;
-using System.Data;
-using System.Drawing;
-using System.Linq;
-using System.Text;
 using System.Windows.Forms;
 using System.Diagnostics;
 using LibTessDotNet;
+using Microsoft.Xna.Framework;
+using Color = System.Drawing.Color;
 
 namespace TessBed
 {
@@ -193,11 +191,10 @@ namespace TessBed
         {
             foreach (var poly in pset)
             {
-                var v = new ContourVertex[poly.Count];
+                var v = new CCRawList<Vector3>(poly.Count);
                 for (int i = 0; i < poly.Count; i++)
                 {
-                    v[i].Position = new Vec3 { X = poly[i].X, Y = poly[i].Y };
-                    v[i].Data = poly[i].Color;
+                    v.Add(new Vector3(poly[i].X, poly[i].Y, 0));
                 }
                 tess.AddContour(v, poly.Orientation);
             }
@@ -206,7 +203,7 @@ namespace TessBed
         private static PolygonSet FromTess(Tess tess)
         {
             var output = new PolygonSet();
-            for (int i = 0; i < tess.ElementCount; i++)
+            for (int i = 0; i < tess.Elements.Count / 3; i++)
             {
                 var poly = new Polygon();
                 for (int j = 0; j < 3; j++)
@@ -214,14 +211,16 @@ namespace TessBed
                     int index = tess.Elements[i * 3 + j];
                     if (index == -1)
                         continue;
-                    var v = new PolygonPoint {
-                        X = tess.Vertices[index].Position.X,
-                        Y = tess.Vertices[index].Position.Y
+                    var v = new PolygonPoint
+                    {
+                        X = tess.Vertices[index].X,
+                        Y = tess.Vertices[index].Y,
+                        //Color = _tess.Vertices[index].Data != null ? (Color)_tess.Vertices[index].Data : Color.White
                     };
                     poly.Add(v);
                 }
                 output.Add(poly);
-            }
+            } 
             return output;
         }
 

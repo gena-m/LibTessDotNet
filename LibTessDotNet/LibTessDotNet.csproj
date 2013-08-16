@@ -10,10 +10,9 @@
     <AppDesignerFolder>Properties</AppDesignerFolder>
     <RootNamespace>LibTessDotNet</RootNamespace>
     <AssemblyName>LibTessDotNet</AssemblyName>
-    <TargetFrameworkVersion>v2.0</TargetFrameworkVersion>
+    <TargetFrameworkVersion>v4.0</TargetFrameworkVersion>
     <FileAlignment>512</FileAlignment>
-    <TargetFrameworkProfile>
-    </TargetFrameworkProfile>
+    <TargetFrameworkProfile>Client</TargetFrameworkProfile>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
     <DebugSymbols>true</DebugSymbols>
@@ -32,20 +31,24 @@
     <OutputPath>bin\Release\</OutputPath>
     <DefineConstants>TRACE</DefineConstants>
     <ErrorReport>prompt</ErrorReport>
-    <WarningLevel>4</WarningLevel>
+    <WarningLevel>1</WarningLevel>
     <LangVersion>default</LangVersion>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
   </PropertyGroup>
   <ItemGroup>
+    <Reference Include="Microsoft.Xna.Framework, Version=4.0.0.0, Culture=neutral, PublicKeyToken=842cf8be1de50553, processorArchitecture=x86" />
     <Reference Include="System" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="Sources\ArrayPool.cs" />
     <Compile Include="Sources\Dict.cs" />
     <Compile Include="Sources\Geom.cs" />
     <Compile Include="Sources\Mesh.cs" />
     <Compile Include="Sources\MeshUtils.cs" />
     <Compile Include="Sources\PriorityHeap.cs" />
     <Compile Include="Sources\PriorityQueue.cs" />
+    <Compile Include="Sources\RawList.cs" />
+    <Compile Include="Sources\ReusedObject.cs" />
     <Compile Include="Sources\Sweep.cs" />
     <Compile Include="Sources\Tess.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />

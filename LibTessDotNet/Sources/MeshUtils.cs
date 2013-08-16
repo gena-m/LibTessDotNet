@@ -33,9 +33,11 @@
 
 using System;
 using System.Diagnostics;
+using Microsoft.Xna.Framework;
 
 namespace LibTessDotNet
 {
+    /*
     public struct Vec3
     {
         public readonly static Vec3 Zero = new Vec3();
@@ -78,15 +80,16 @@ namespace LibTessDotNet
         {
             dot = u.X * v.X + u.Y * v.Y + u.Z * v.Z;
         }
+        
         public static void Normalize(ref Vec3 v)
         {
             float len = v.X * v.X + v.Y * v.Y + v.Z * v.Z;
-            Debug.Assert(len >= 0.0f);
             len = 1.0f / (float)Math.Sqrt(len);
             v.X *= len;
             v.Y *= len;
             v.Z *= len;
         }
+        
         public static int LongAxis(ref Vec3 v)
         {
             int i = 0;
@@ -95,24 +98,62 @@ namespace LibTessDotNet
             return i;
         }
     }
+    */
 
     internal static class MeshUtils
     {
         public const int Undef = ~0;
 
-        public class Vertex
+        public static void SetIndex(ref Vector3 v, int index, float value)
+        {
+                if (index == 0) v.X = value;
+                else if (index == 1) v.Y = value;
+                else if (index == 2) v.Z = value;
+                else throw new IndexOutOfRangeException();
+        }
+
+        public static float GetIndex(ref Vector3 v, int index)
+        {
+            if (index == 0) return v.X;
+            else if (index == 1) return v.Y;
+            else if (index == 2) return v.Z;
+            else throw new IndexOutOfRangeException();
+        }
+
+        public static int LongAxis(ref Vector3 v)
+        {
+            int i = 0;
+            if (Math.Abs(v.Y) > Math.Abs(v.X)) i = 1;
+            if (Math.Abs(v.Z) > Math.Abs(i == 0 ? v.X : v.Y)) i = 2;
+            return i;
+        }
+
+        public class Vertex : ReusedObject<Vertex>
         {
             internal Vertex _prev, _next;
             internal Edge _anEdge;
 
-            internal Vec3 _coords;
+            internal Vector3 _coords;
             internal float _s, _t;
             internal PQHandle _pqHandle;
             internal int _n;
-            internal object _data;
+            //internal object _data;
+            
+            protected override void PrepareForReuse()
+            {
+                /*
+                _prev = _next = null;
+                _anEdge = null;
+
+                _coords = Vec3.Zero;
+                _s = _t = 0;
+                _pqHandle._handle = 0;
+                _n = 0;
+               */
+            }
         }
 
-        public class Face
+        public class Face : ReusedObject<Face>
         {
             internal Face _prev, _next;
             internal Edge _anEdge;
@@ -134,6 +175,17 @@ namespace LibTessDotNet
                     return n;
                 }
             }
+
+            protected override void PrepareForReuse()
+            {
+                /*
+                _prev = _next = null;
+                _anEdge = null;
+                _trail = null;
+                _n = 0;
+                _marked = _inside = false;
+                */
+            }
         }
 
         public struct EdgePair
@@ -143,15 +195,21 @@ namespace LibTessDotNet
             public static EdgePair Create()
             {
                 var pair = new EdgePair();
-                pair._e = new Edge();
+                pair._e = Edge.Create();
                 pair._e._pair = pair;
-                pair._eSym = new Edge();
+                pair._eSym = Edge.Create();
                 pair._eSym._pair = pair;
                 return pair;
             }
+
+            public void Free()
+            {
+                _e.Free();
+                _eSym.Free();
+            }
         }
 
-        public class Edge
+        public class Edge : ReusedObject<Edge>
         {
             internal EdgePair _pair;
             internal Edge _next, _Sym, _Onext, _Lnext;
@@ -170,7 +228,7 @@ namespace LibTessDotNet
             internal Edge _Dnext { get { return _Rprev._Sym; } set { _Rprev._Sym = value; } }
             internal Edge _Rnext { get { return _Oprev._Sym; } set { _Oprev._Sym = value; } }
 
-            internal Edge() { }
+            public Edge() { }
 
             internal static void EnsureFirst(ref Edge e)
             {
@@ -178,6 +236,15 @@ namespace LibTessDotNet
                 {
                     e = e._Sym;
                 }
+            }
+
+            protected override void PrepareForReuse()
+            {
+                //_next = _Sym = _Onext = _Lnext = null;
+                //_Org = null;
+                //_Lface = null;
+                //_activeRegion = null;
+                //_winding = 0;
             }
         }
 
@@ -319,6 +386,8 @@ namespace LibTessDotNet
             var ePrev = eDel._Sym._next;
             eNext._Sym._next = ePrev;
             ePrev._Sym._next = eNext;
+
+            eDel.Free();
         }
 
         /// <summary>
@@ -341,6 +410,8 @@ namespace LibTessDotNet
             var vNext = vDel._next;
             vNext._prev = vPrev;
             vPrev._next = vNext;
+
+            vDel.Free();
         }
 
         /// <summary>
@@ -363,6 +434,8 @@ namespace LibTessDotNet
             var fNext = fDel._next;
             fNext._prev = fPrev;
             fPrev._next = fNext;
+
+            fDel.Free();
         }
     }
 }

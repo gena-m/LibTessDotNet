@@ -36,7 +36,7 @@ using System.Diagnostics;
 
 namespace LibTessDotNet
 {
-    internal static class Geom
+    internal static class Geom 
     {
         public static bool IsWindingInside(WindingRule rule, int n)
         {
@@ -52,6 +52,14 @@ namespace LibTessDotNet
                     return n < 0;
                 case WindingRule.AbsGeqTwo:
                     return n >= 2 || n <= -2;
+                case WindingRule.OddPositive:
+                    return (n & 1) == 1 && n > 0;
+                case WindingRule.OddNegative:
+                    return (n & 1) == 1 && n < 0;
+                case WindingRule.EvenPositive:
+                    return (n & 1) == 0 && n > 0;
+                case WindingRule.EvenNegative:
+                    return (n & 1) == 0 && n < 0;
             }
             throw new Exception("Wrong winding rule");
         }
@@ -170,12 +178,12 @@ namespace LibTessDotNet
 
         public static bool EdgeGoesLeft(MeshUtils.Edge e)
         {
-            return VertLeq(e._Dst, e._Org);
+            return VertLeq(e._Sym._Org, e._Org);
         }
 
         public static bool EdgeGoesRight(MeshUtils.Edge e)
         {
-            return VertLeq(e._Org, e._Dst);
+            return VertLeq(e._Org, e._Sym._Org);
         }
 
         public static float VertL1dist(MeshUtils.Vertex u, MeshUtils.Vertex v)
@@ -191,8 +199,8 @@ namespace LibTessDotNet
 
         public static float Interpolate(float a, float x, float b, float y)
         {
-            a = a < 0.0f ? 0.0f : a;
-            b = b < 0.0f ? 0.0f : b;
+            if (a < 0.0f) a = 0.0f;
+            if (b < 0.0f) b = 0.0f;
             return ((a <= b) ? ((b == 0.0f) ? ((x+y) / 2.0f)
                     : (x + (y-x) * (a/(a+b))))
                     : (y + (x-y) * (b/(a+b))));
