@@ -32,6 +32,8 @@
 */
 
 using System.Diagnostics;
+using Microsoft.Xna.Framework;
+
 
 namespace LibTessDotNet
 {
@@ -41,7 +43,11 @@ namespace LibTessDotNet
         NonZero,
         Positive,
         Negative,
-        AbsGeqTwo
+        AbsGeqTwo,
+        OddPositive,
+        OddNegative,
+        EvenPositive,
+        EvenNegative
     }
 
     public enum ElementType
@@ -58,71 +64,84 @@ namespace LibTessDotNet
         CounterClockwise
     }
 
+    /*
     public struct ContourVertex
     {
         public Vec3 Position;
         public object Data;
     }
+    */
 
-    public delegate object CombineCallback(Vec3 position, object[] data, float[] weights);
+    public delegate object CombineCallback(Vector3 position, object[] data, float[] weights);
 
     public partial class Tess
     {
         private Mesh _mesh;
-        private Vec3 _normal;
-        private Vec3 _sUnit;
-        private Vec3 _tUnit;
+        private Vector3 _normal;
+        private Vector3 _sUnit;
+        private Vector3 _tUnit;
 
         private float _bminX, _bminY, _bmaxX, _bmaxY;
 
         private WindingRule _windingRule;
 
-        private Dict<ActiveRegion> _dict;
-        private PriorityQueue<MeshUtils.Vertex> _pq;
+        private ActiveRegionDict _dict;
+        private VertexPriorityQueue _pq;
         private MeshUtils.Vertex _event;
 
         private CombineCallback _combineCallback;
 
-        private ContourVertex[] _vertices;
-        private int _vertexCount;
-        private int[] _elements;
-        private int _elementCount;
+        private CCRawList<Vector3> _vertices;
+        private CCRawList<int> _elements;
 
-        public Vec3 Normal { get { return _normal; } set { _normal = value; } }
+        public Vector3 Normal { get { return _normal; } set { _normal = value; } }
 
         public float SUnitX = 1.0f;
         public float SUnitY = 1.0f;
 
-        public ContourVertex[] Vertices { get { return _vertices; } }
-        public int VertexCount { get { return _vertexCount; } }
-
-        public int[] Elements { get { return _elements; } }
-        public int ElementCount { get { return _elementCount; } }
+        public CCRawList<Vector3> Vertices { get { return _vertices; } }
+        public CCRawList<int> Elements { get { return _elements; } }
 
         public Tess()
         {
-            _normal = Vec3.Zero;
+            _normal = Vector3.Zero;
             _bminX = _bminY = _bmaxX = _bmaxY = 0.0f;
 
             _windingRule = WindingRule.EvenOdd;
             _mesh = null;
 
-            _vertices = null;
-            _vertexCount = 0;
-            _elements = null;
-            _elementCount = 0;
+            _vertices = new CCRawList<Vector3>(true);
+            _elements = new CCRawList<int>(true);
         }
 
-        private void ComputeNormal(ref Vec3 norm)
+        private static float[] _minVal = new float[3];
+        private static MeshUtils.Vertex[] _minVert = new MeshUtils.Vertex[3];
+        private static float[] _maxVal = new float[3];
+        private static MeshUtils.Vertex[] _maxVert = new MeshUtils.Vertex[3];
+
+        private void ComputeNormal(ref Vector3 norm)
         {
             var v = _mesh._vHead._next;
 
+            var minVal = _minVal;
+            var minVert = _minVert;
+            var maxVal = _maxVal;
+            var maxVert = _maxVert;
+
+            minVal[0] = maxVal[0] = v._coords.X;
+            minVal[1] = maxVal[1] = v._coords.Y;
+            minVal[2] = maxVal[2] = v._coords.Z;
+            minVert[0] = minVert[1] = minVert[2] = maxVert[0] = maxVert[1] = maxVert[2] = v;
+
+            /*
             var minVal = new float[3] { v._coords.X, v._coords.Y, v._coords.Z };
             var minVert = new MeshUtils.Vertex[3] { v, v, v };
             var maxVal = new float[3] { v._coords.X, v._coords.Y, v._coords.Z };
             var maxVert = new MeshUtils.Vertex[3] { v, v, v };
+            */
 
-            for (; v != _mesh._vHead; v = v._next)
+            var head = _mesh._vHead;
+            for (; v != head; v = v._next)
             {
                 if (v._coords.X < minVal[0]) { minVal[0] = v._coords.X; minVert[0] = v; }
                 if (v._coords.Y < minVal[1]) { minVal[1] = v._coords.Y; minVert[1] = v; }
@@ -140,7 +159,7 @@ namespace LibTessDotNet
             if (minVal[i] >= maxVal[i])
             {
                 // All vertices are the same -- normal doesn't matter
-                norm = new Vec3 { X = 0.0f, Y = 0.0f, Z = 1.0f };
+                norm = new Vector3 { X = 0.0f, Y = 0.0f, Z = 1.0f };
                 return;
             }
 
@@ -149,11 +168,11 @@ namespace LibTessDotNet
             float maxLen2 = 0.0f, tLen2;
             var v1 = minVert[i];
             var v2 = maxVert[i];
-            Vec3 d1, d2, tNorm;
-            Vec3.Sub(ref v1._coords, ref v2._coords, out d1);
-            for (v = _mesh._vHead._next; v != _mesh._vHead; v = v._next)
+            Vector3 d1, d2, tNorm;
+            Vector3.Subtract(ref v1._coords, ref v2._coords, out d1);
+            for (v = head._next; v != head; v = v._next)
             {
-                Vec3.Sub(ref v._coords, ref v2._coords, out d2);
+                Vector3.Subtract(ref v._coords, ref v2._coords, out d2);
                 tNorm.X = d1.Y * d2.Z - d1.Z * d2.Y;
                 tNorm.Y = d1.Z * d2.X - d1.X * d2.Z;
                 tNorm.Z = d1.X * d2.Y - d1.Y * d2.X;
@@ -168,9 +187,9 @@ namespace LibTessDotNet
             if (maxLen2 <= 0.0f)
             {
                 // All points lie on a single line -- any decent normal will do
-                norm = Vec3.Zero;
-                i = Vec3.LongAxis(ref d1);
-                norm[i] = 1.0f;
+                norm = Vector3.Zero;
+                i = MeshUtils.LongAxis(ref d1);
+                MeshUtils.SetIndex(ref norm, i, 1.0f);
             }
         }
 
@@ -187,7 +206,7 @@ namespace LibTessDotNet
                     continue;
                 }
                 do {
-                    area += (e._Org._s - e._Dst._s) * (e._Org._t + e._Dst._t);
+                    area += (e._Org._s - e._Sym._Org._s) * (e._Org._t + e._Sym._Org._t);
                     e = e._Lnext;
                 } while (e != f._anEdge);
             }
@@ -198,7 +217,7 @@ namespace LibTessDotNet
                 {
                     v._t = -v._t;
                 }
-                Vec3.Neg(ref _tUnit);
+                Vector3.Negate(ref _tUnit, out _tUnit);
             }
         }
 
@@ -213,21 +232,22 @@ namespace LibTessDotNet
                 computedNormal = true;
             }
 
-            int i = Vec3.LongAxis(ref norm);
+            int i = MeshUtils.LongAxis(ref norm);
 
-            _sUnit[i] = 0.0f;
-            _sUnit[(i + 1) % 3] = SUnitX;
-            _sUnit[(i + 2) % 3] = SUnitY;
+            MeshUtils.SetIndex(ref _sUnit, i, 0.0f);
+            MeshUtils.SetIndex(ref _sUnit, (i + 1) % 3, SUnitX);
+            MeshUtils.SetIndex(ref _sUnit, (i + 2) % 3, SUnitY);
 
-            _tUnit[i] = 0.0f;
-            _tUnit[(i + 1) % 3] = norm[i] > 0.0f ? -SUnitY : SUnitY;
-            _tUnit[(i + 2) % 3] = norm[i] > 0.0f ? SUnitX : -SUnitX;
+            MeshUtils.SetIndex(ref _tUnit, i, 0.0f);
+            MeshUtils.SetIndex(ref _tUnit, (i + 1) % 3, MeshUtils.GetIndex(ref norm, i) > 0.0f ? -SUnitY : SUnitY);
+            MeshUtils.SetIndex(ref _tUnit, (i + 2) % 3, MeshUtils.GetIndex(ref norm, i) > 0.0f ? SUnitX : -SUnitX);
 
             // Project the vertices onto the sweep plane
-            for (var v = _mesh._vHead._next; v != _mesh._vHead; v = v._next)
+            var head = _mesh._vHead;
+            for (var v = head._next; v != head; v = v._next)
             {
-                Vec3.Dot(ref v._coords, ref _sUnit, out v._s);
-                Vec3.Dot(ref v._coords, ref _tUnit, out v._t);
+                Vector3.Dot(ref v._coords, ref _sUnit, out v._s);
+                Vector3.Dot(ref v._coords, ref _tUnit, out v._t);
             }
             if (computedNormal)
             {
@@ -236,7 +256,7 @@ namespace LibTessDotNet
 
             // Compute ST bounds.
             bool first = true;
-            for (var v = _mesh._vHead._next; v != _mesh._vHead; v = v._next)
+            for (var v = head._next; v != head; v = v._next)
             {
                 if (first)
                 {
@@ -247,9 +267,9 @@ namespace LibTessDotNet
                 else
                 {
                     if (v._s < _bminX) _bminX = v._s;
-                    if (v._s > _bmaxX) _bmaxX = v._s;
+                    else if (v._s > _bmaxX) _bmaxX = v._s;
                     if (v._t < _bminY) _bminY = v._t;
-                    if (v._t > _bmaxY) _bmaxY = v._t;
+                    else if (v._t > _bmaxY) _bmaxY = v._t;
                 }
             }
         }
@@ -291,20 +311,20 @@ namespace LibTessDotNet
             var up = face._anEdge;
             Debug.Assert(up._Lnext != up && up._Lnext._Lnext != up);
 
-            for (; Geom.VertLeq(up._Dst, up._Org); up = up._Lprev);
-            for (; Geom.VertLeq(up._Org, up._Dst); up = up._Lnext);
+            for (; Geom.VertLeq(up._Sym._Org, up._Org); up = up._Lprev) ;
+            for (; Geom.VertLeq(up._Org, up._Sym._Org); up = up._Lnext) ;
 
             var lo = up._Lprev;
 
             while (up._Lnext != lo)
             {
-                if (Geom.VertLeq(up._Dst, lo._Org))
+                if (Geom.VertLeq(up._Sym._Org, lo._Org))
                 {
                     // up.Dst is on the left. It is safe to form triangles from lo.Org.
                     // The EdgeGoesLeft test guarantees progress even when some triangles
                     // are CW, given that the upper and lower chains are truly monotone.
                     while (lo._Lnext != up && (Geom.EdgeGoesLeft(lo._Lnext)
-                        || Geom.EdgeSign(lo._Org, lo._Dst, lo._Lnext._Dst) <= 0.0f))
+                        || Geom.EdgeSign(lo._Org, lo._Sym._Org, lo._Lnext._Sym._Org) <= 0.0f))
                     {
                         lo = _mesh.Connect(lo._Lnext, lo)._Sym;
                     }
@@ -314,7 +334,7 @@ namespace LibTessDotNet
                 {
                     // lo.Org is on the left.  We can make CCW triangles from up.Dst.
                     while (lo._Lnext != up && (Geom.EdgeGoesRight(up._Lprev)
-                        || Geom.EdgeSign(up._Dst, up._Org, up._Lprev._Org) >= 0.0f))
+                        || Geom.EdgeSign(up._Sym._Org, up._Org, up._Lprev._Org) >= 0.0f))
                     {
                         up = _mesh.Connect(up, up._Lprev)._Sym;
                     }
@@ -468,13 +488,16 @@ namespace LibTessDotNet
                 ++maxFaceCount;
             }
 
-            _elementCount = maxFaceCount;
+            //_elementCount = maxFaceCount;
             if (elementType == ElementType.ConnectedPolygons)
                 maxFaceCount *= 2;
-            _elements = new int[maxFaceCount * polySize];
 
-            _vertexCount = maxVertexCount;
-            _vertices = new ContourVertex[_vertexCount];
+            _elements.Count = maxFaceCount * polySize; // = new int[maxFaceCount * polySize];
+            var elems = _elements.Elements;
+
+            //_vertexCount = maxVertexCount;
+            _vertices.Count = maxVertexCount; // = new Vec3[_vertexCount];
+            var verts = _vertices.Elements;
 
             // Output vertices.
             for (v = _mesh._vHead._next; v != _mesh._vHead; v = v._next)
@@ -483,8 +506,8 @@ namespace LibTessDotNet
                 {
                     // Store coordinate
                     int n = v._n;
-                    _vertices[v._n].Position = v._coords;
-                    _vertices[v._n].Data = v._data;
+                    verts[n] = v._coords;
+                    //_vertices[n].Data = v._data;
                 }
             }
 
@@ -499,14 +522,14 @@ namespace LibTessDotNet
                 faceVerts = 0;
                 do {
                     v = edge._Org;
-                    _elements[elementIndex++] = v._n;
+                    elems[elementIndex++] = v._n;
                     faceVerts++;
                     edge = edge._Lnext;
                 } while (edge != f._anEdge);
                 // Fill unused.
                 for (i = faceVerts; i < polySize; ++i)
                 {
-                    _elements[elementIndex++] = MeshUtils.Undef;
+                    elems[elementIndex++] = MeshUtils.Undef;
                 }
 
                 // Store polygon connectivity
@@ -515,13 +538,13 @@ namespace LibTessDotNet
                     edge = f._anEdge;
                     do
                     {
-                        _elements[elementIndex++] = GetNeighbourFace(edge);
+                        elems[elementIndex++] = GetNeighbourFace(edge);
                         edge = edge._Lnext;
                     } while (edge != f._anEdge);
                     // Fill unused.
                     for (i = faceVerts; i < polySize; ++i)
                     {
-                        _elements[elementIndex++] = MeshUtils.Undef;
+                        elems[elementIndex++] = MeshUtils.Undef;
                     }
                 }
             }
@@ -534,8 +557,8 @@ namespace LibTessDotNet
             int startVert = 0;
             int vertCount = 0;
 
-            _vertexCount = 0;
-            _elementCount = 0;
+            var _vertexCount = 0;
+            var _elementCount = 0;
 
             for (f = _mesh._fHead._next; f != _mesh._fHead; f = f._next)
             {
@@ -552,8 +575,10 @@ namespace LibTessDotNet
                 ++_elementCount;
             }
 
-            _elements = new int[_elementCount * 2];
-            _vertices = new ContourVertex[_vertexCount];
+            _elements.Count = _elementCount * 2; // = new int[_elementCount * 2];
+            _vertices.Count = _vertexCount; // = new Vec3[_vertexCount];
+            var verts = _vertices.Elements;
+            var elems = _elements.Elements;
 
             int vertIndex = 0;
             int elementIndex = 0;
@@ -567,56 +592,58 @@ namespace LibTessDotNet
                 vertCount = 0;
                 start = edge = f._anEdge;
                 do {
-                    _vertices[vertIndex++].Position = edge._Org._coords;
-                    _vertices[vertIndex++].Data = edge._Org._data;
+                    verts[vertIndex++] = edge._Org._coords;
+                    //_vertices[vertIndex++].Data = edge._Org._data;
                     ++vertCount;
                     edge = edge._Lnext;
                 } while (edge != start);
 
-                _elements[elementIndex++] = startVert;
-                _elements[elementIndex++] = vertCount;
+                elems[elementIndex++] = startVert;
+                elems[elementIndex++] = vertCount;
 
                 startVert += vertCount;
             }
         }
 
-        private float SignedArea(ContourVertex[] vertices)
+        private float SignedArea(Vector3[] vertices, int count)
         {
             float area = 0.0f;
 
-            for (int i = 0; i < vertices.Length; i++)
+            for (int i = 0; i < count; i++)
             {
                 var v0 = vertices[i];
-                var v1 = vertices[(i + 1) % vertices.Length];
+                var v1 = vertices[(i + 1) % count];
 
-                area += v0.Position.X * v1.Position.Y;
-                area -= v0.Position.Y * v1.Position.X;
+                area += v0.X * v1.Y;
+                area -= v0.Y * v1.X;
             }
 
             return area * 0.5f;
         }
 
-        public void AddContour(ContourVertex[] vertices)
+        public void AddContour(CCRawList<Vector3> vertices)
         {
             AddContour(vertices, ContourOrientation.Original);
         }
 
-        public void AddContour(ContourVertex[] vertices, ContourOrientation forceOrientation)
+        public void AddContour(CCRawList<Vector3> vertices, ContourOrientation forceOrientation)
         {
             if (_mesh == null)
             {
                 _mesh = new Mesh();
             }
 
+            var verts = vertices.Elements;
+
             bool reverse = false;
             if (forceOrientation != ContourOrientation.Original)
             {
-                float area = SignedArea(vertices);
+                float area = SignedArea(verts, vertices.Count);
                 reverse = (forceOrientation == ContourOrientation.Clockwise && area < 0.0f) || (forceOrientation == ContourOrientation.CounterClockwise && area > 0.0f);
             }
 
             MeshUtils.Edge e = null;
-            for (int i = 0; i < vertices.Length; ++i)
+            for (int i = 0, count = vertices.Count; i < count; ++i)
             {
                 if (e == null)
                 {
@@ -631,13 +658,13 @@ namespace LibTessDotNet
                     e = e._Lnext;
                 }
 
-                int index = reverse ? vertices.Length - 1 - i : i;
+                int index = reverse ? count - 1 - i : i;
                 // The new vertex is now e._Org.
-                e._Org._coords = vertices[index].Position;
-                e._Org._data = vertices[index].Data;
+                e._Org._coords = verts[index];
+                //e._Org._data = vertices[index].Data;
 
                 // The winding of an edge says how the winding number changes as we
-                // cross from the edge's right face to its left face.  We add the
+                // cross from the edge''s right face to its left face.  We add the
                 // vertices in such an order that a CCW contour will add +1 to
                 // the winding number of the region inside the contour.
                 e._winding = 1;
@@ -652,8 +679,8 @@ namespace LibTessDotNet
 
         public void Tessellate(WindingRule windingRule, ElementType elementType, int polySize, CombineCallback combineCallback)
         {
-            _vertices = null;
-            _elements = null;
+            //_vertices = null;
+            //_elements = null;
 
             _windingRule = windingRule;
             _combineCallback = combineCallback;
@@ -696,6 +723,12 @@ namespace LibTessDotNet
             {
                 OutputPolymesh(elementType, polySize);
             }
+
+            MeshUtils.Edge.FreeAll();
+            MeshUtils.Vertex.FreeAll();
+            ActiveRegion.FreeAll();
+            MeshUtils.Face.FreeAll();
+            ActiveRegionDict.Node.FreeAll();
 
             _mesh = null;
         }
